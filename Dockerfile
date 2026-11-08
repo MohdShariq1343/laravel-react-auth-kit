@@ -1,5 +1,6 @@
+
 # ==========================================
-# Stage 1: Build React frontend using Vite
+# Stage 1: Build React frontend
 # ==========================================
 FROM node:22-bookworm-slim AS frontend
 
@@ -19,15 +20,13 @@ RUN npm run build
 # ==========================================
 FROM php:8.2-fpm-bookworm
 
-# Install system dependencies
+# Install required system libraries
 RUN apt-get update && apt-get install -y \
     nginx \
     git \
     curl \
     unzip \
-    zip \
     libpq-dev \
-    libsqlite3-dev \
     libpng-dev \
     libjpeg62-turbo-dev \
     libfreetype6-dev \
@@ -36,73 +35,77 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     libicu-dev \
     libcurl4-openssl-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure GD extension
+# Configure GD
 RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg
 
-# Install PHP extensions
-# Use -j2 to reduce memory usage during Render builds
+# Install PostgreSQL extension separately
+RUN docker-php-ext-install pdo_pgsql
+
+# Install other Laravel extensions
 RUN docker-php-ext-install -j2 \
-    pdo_pgsql \
-    pdo_mysql \
-    pdo_sqlite \
-    sqlite3 \
     mbstring \
     bcmath \
-    gd \
-    zip \
-    intl \
     exif \
     pcntl \
-    opcache \
+    opcache
+
+# Install image, archive and internationalization extensions
+RUN docker-php-ext-install -j2 \
+    gd \
+    zip \
+    intl
+
+# Install HTTP and XML extensions
+RUN docker-php-ext-install -j2 \
     curl \
     xml
 
-# Set working directory
+# Working directory
 WORKDIR /var/www/html
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Copy Laravel source code
+# Copy Laravel application
 COPY . .
 
-# Install Laravel production dependencies
+# Install production dependencies
 RUN composer install \
     --no-dev \
     --prefer-dist \
     --optimize-autoloader \
     --no-interaction
 
-# Copy built React/Vite assets
+# Copy React build
 COPY --from=frontend /app/public/build ./public/build
 
-# Confirm Vite manifest exists
+# Check Vite manifest
 RUN test -f public/build/manifest.json
 
-# Create required Laravel directories
+# Create Laravel directories
 RUN mkdir -p \
     storage/framework/cache \
     storage/framework/sessions \
     storage/framework/views \
     storage/logs \
-    bootstrap/cache
+    bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
 
 # Configure Nginx
 RUN rm -f /etc/nginx/sites-enabled/default
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy startup script
+# Startup script
 COPY docker/start.sh /start.sh
 
 RUN chmod +x /start.sh
 
-# Render default web service port
 EXPOSE 10000
 
-# Start application
 CMD ["/start.sh"]
