@@ -23,7 +23,9 @@ FROM php:8.2-fpm-bookworm
 RUN apt-get update && apt-get install -y \
     nginx \
     git \
+    curl \
     unzip \
+    zip \
     libpq-dev \
     libsqlite3-dev \
     libpng-dev \
@@ -36,13 +38,14 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure GD
+# Configure GD extension
 RUN docker-php-ext-configure gd \
     --with-freetype \
     --with-jpeg
 
 # Install PHP extensions
-RUN docker-php-ext-install -j$(nproc) \
+# Use -j2 to reduce memory usage during Render builds
+RUN docker-php-ext-install -j2 \
     pdo_pgsql \
     pdo_mysql \
     pdo_sqlite \
